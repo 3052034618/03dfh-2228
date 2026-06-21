@@ -19,7 +19,32 @@ function loadData() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
-      return JSON.parse(saved)
+      const data = JSON.parse(saved)
+      if (data.stockBatches) {
+        data.stockBatches = data.stockBatches.map(batch => {
+          if (batch.expectedCodes) return batch
+          return {
+            ...batch,
+            expectedCodes: []
+          }
+        })
+        data.stockBatches = data.stockBatches.map(batch => {
+          batch.wrongRouteBoxes = (batch.wrongRouteBoxes || []).map(item => {
+            if (typeof item === 'string') {
+              return { boxCode: item, originalRouteId: '', originalRouteName: '未知线路', scanTime: '' }
+            }
+            return item
+          })
+          batch.extraBoxes = (batch.extraBoxes || []).map(item => {
+            if (typeof item === 'string') {
+              return { boxCode: item, scanTime: '' }
+            }
+            return item
+          })
+          return batch
+        })
+      }
+      return data
     }
   } catch (e) {
     console.error('加载数据失败:', e)
@@ -81,17 +106,17 @@ function updateBoxStatus(boxCode, status, extra = {}) {
 }
 
 function createStockBatch(batchData) {
+  const expectedCodes = batchData.expectedCodes || []
   const batch = {
     id: generateId('SB'),
     routeId: batchData.routeId,
-    expectedCount: batchData.expectedCount || 0,
+    expectedCodes,
     scannedCodes: [],
     wrongRouteBoxes: [],
     extraBoxes: [],
     startTime: new Date().toISOString(),
     endTime: null,
-    status: 'active',
-    ...batchData
+    status: 'active'
   }
   store.stockBatches.unshift(batch)
   return batch
@@ -106,49 +131,71 @@ function scanBoxForStock(batchId, boxCode) {
   if (!batch) return null
 
   const box = getBoxByCode(boxCode)
+  const scanTime = new Date().toLocaleString('zh-CN')
   const result = {
     boxCode,
     isNew: false,
     isDuplicate: false,
     isWrongRoute: false,
-    isExtra: false
+    isExtra: false,
+    isInExpected: false,
+    wrongRouteInfo: null
   }
 
-  if (batch.scannedCodes.includes(boxCode)) {
+  const allScannedCodes = [
+    ...batch.scannedCodes,
+    ...batch.wrongRouteBoxes.map(r => r.boxCode),
+    ...batch.extraBoxes.map(r => r.boxCode)
+  ]
+  if (allScannedCodes.includes(boxCode)) {
     result.isDuplicate = true
     return result
   }
 
   if (box && box.routeId && box.routeId !== batch.routeId) {
     result.isWrongRoute = true
-    if (!batch.wrongRouteBoxes.includes(boxCode)) {
-      batch.wrongRouteBoxes.push(boxCode)
+    result.wrongRouteInfo = {
+      boxCode,
+      originalRouteId: box.routeId,
+      originalRouteName: getRouteName(box.routeId),
+      scanTime
     }
+    batch.wrongRouteBoxes.push(result.wrongRouteInfo)
     return result
   }
 
-  if (!box || !box.routeId) {
-    result.isNew = true
-    const newBox = addBox({
-      code: boxCode,
-      routeId: batch.routeId,
-      status: 'pending_cleaning'
-    })
+  const isInExpected = batch.expectedCodes.includes(boxCode)
+
+  if (!isInExpected) {
+    result.isExtra = true
+    if (!box) {
+      addBox({
+        code: boxCode,
+        routeId: batch.routeId,
+        status: 'pending_cleaning'
+      })
+    } else {
+      updateBoxStatus(boxCode, 'pending_cleaning')
+    }
+    batch.extraBoxes.push({ boxCode, scanTime })
     batch.scannedCodes.push(boxCode)
     return result
   }
 
-  batch.scannedCodes.push(boxCode)
-  
-  if (batch.scannedCodes.length > batch.expectedCount) {
-    result.isExtra = true
-    if (!batch.extraBoxes.includes(boxCode)) {
-      batch.extraBoxes.push(boxCode)
-    }
+  result.isInExpected = true
+
+  if (!box) {
+    result.isNew = true
+    addBox({
+      code: boxCode,
+      routeId: batch.routeId,
+      status: 'pending_cleaning'
+    })
+  } else {
+    updateBoxStatus(boxCode, 'pending_cleaning')
   }
 
-  updateBoxStatus(boxCode, 'pending_cleaning')
-
+  batch.scannedCodes.push(boxCode)
   return result
 }
 
