@@ -512,23 +512,30 @@ function applyImport() {
     newCodes.push(val)
   })
 
-  if (newCodes.length === 0) {
-    ElMessage.warning('文件中未找到有效新箱码')
-    return
+  if (newCodes.length > 0) {
+    const merged = [...existing, ...newCodes]
+    expectedCodesText.value = merged.join('\n')
   }
-
-  const merged = [...existing, ...newCodes]
-  expectedCodesText.value = merged.join('\n')
 
   const parts = [`新增 ${newCodes.length} 个箱码`]
   if (headerSkipped > 0) parts.push(`跳过表头 ${headerSkipped} 行`)
   if (emptySkipped > 0) parts.push(`跳过空行 ${emptySkipped} 行`)
   if (dupSkipped > 0) parts.push(`跳过重复 ${dupSkipped} 个`)
 
-  ElMessage.success({
-    message: parts.join('，'),
-    duration: 4000
-  })
+  const totalLines = rawLines.filter(l => l.trim()).length
+  if (newCodes.length === 0 && totalLines > 0) {
+    ElMessage.warning({
+      message: parts.join('，'),
+      duration: 4000
+    })
+  } else if (newCodes.length > 0) {
+    ElMessage.success({
+      message: parts.join('，'),
+      duration: 4000
+    })
+  } else {
+    ElMessage.info('文件内容为空')
+  }
 
   importBuffer.value = ''
   showImportDialog.value = false

@@ -22,13 +22,9 @@ function loadData() {
       const data = JSON.parse(saved)
       if (data.stockBatches) {
         data.stockBatches = data.stockBatches.map(batch => {
-          if (batch.expectedCodes) return batch
-          return {
-            ...batch,
-            expectedCodes: []
+          if (!batch.expectedCodes) {
+            batch.expectedCodes = []
           }
-        })
-        data.stockBatches = data.stockBatches.map(batch => {
           batch.wrongRouteBoxes = (batch.wrongRouteBoxes || []).map(item => {
             if (typeof item === 'string') {
               return { boxCode: item, originalRouteId: '', originalRouteName: '未知线路', scanTime: '' }
@@ -41,6 +37,12 @@ function loadData() {
             }
             return item
           })
+          if (!batch.handoverStatus) {
+            batch.handoverStatus = 'pending'
+          }
+          if (!batch.reviewNotes) {
+            batch.reviewNotes = { missing: '', extra: '', wrong: '' }
+          }
           return batch
         })
       }
@@ -116,7 +118,13 @@ function createStockBatch(batchData) {
     extraBoxes: [],
     startTime: new Date().toISOString(),
     endTime: null,
-    status: 'active'
+    status: 'active',
+    handoverStatus: 'pending',
+    reviewNotes: {
+      missing: '',
+      extra: '',
+      wrong: ''
+    }
   }
   store.stockBatches.unshift(batch)
   return batch
@@ -312,6 +320,29 @@ function initMockData() {
 
 initMockData()
 
+function updateBatchReview(batchId, reviewData) {
+  const batch = store.stockBatches.find(b => b.id === batchId)
+  if (!batch) return null
+  if (reviewData.handoverStatus !== undefined) {
+    batch.handoverStatus = reviewData.handoverStatus
+  }
+  if (reviewData.reviewNotes) {
+    if (!batch.reviewNotes) {
+      batch.reviewNotes = { missing: '', extra: '', wrong: '' }
+    }
+    if (reviewData.reviewNotes.missing !== undefined) {
+      batch.reviewNotes.missing = reviewData.reviewNotes.missing
+    }
+    if (reviewData.reviewNotes.extra !== undefined) {
+      batch.reviewNotes.extra = reviewData.reviewNotes.extra
+    }
+    if (reviewData.reviewNotes.wrong !== undefined) {
+      batch.reviewNotes.wrong = reviewData.reviewNotes.wrong
+    }
+  }
+  return batch
+}
+
 export const useStore = () => ({
   state: store,
   generateId,
@@ -329,5 +360,6 @@ export const useStore = () => ({
   createRepairRecord,
   finishRepair,
   getRouteName,
+  updateBatchReview,
   initMockData
 })

@@ -37,58 +37,65 @@
 
       <el-table :data="filteredBatches" stripe>
         <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column label="线路" min-width="140">
+        <el-table-column label="线路" min-width="130">
           <template #default="{ row }">
             {{ getRouteName(row.routeId) }}
           </template>
         </el-table-column>
-        <el-table-column label="应回" width="70" align="center">
+        <el-table-column label="应回" width="60" align="center">
           <template #default="{ row }">
             {{ row.expectedCodes.length }}
           </template>
         </el-table-column>
-        <el-table-column label="已回" width="70" align="center">
+        <el-table-column label="已回" width="60" align="center">
           <template #default="{ row }">
             {{ getReturnedCount(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="缺失" width="70" align="center">
+        <el-table-column label="缺失" width="60" align="center">
           <template #default="{ row }">
             <span :class="{ 'text-danger': getMissingCodes(row).length > 0 }">
               {{ getMissingCodes(row).length }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="多出" width="70" align="center">
+        <el-table-column label="多出" width="60" align="center">
           <template #default="{ row }">
             <span :class="{ 'text-warning': row.extraBoxes.length > 0 }">
               {{ row.extraBoxes.length }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="错线路" width="70" align="center">
+        <el-table-column label="错线路" width="60" align="center">
           <template #default="{ row }">
             <span :class="{ 'text-danger': row.wrongRouteBoxes.length > 0 }">
               {{ row.wrongRouteBoxes.length }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="盘点" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="row.status === 'active' ? 'warning' : 'success'" size="small">
               {{ row.status === 'active' ? '进行中' : '已完成' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="盘点时间" width="180">
+        <el-table-column label="交接" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="handoverTagType(row.handoverStatus)" size="small">
+              {{ handoverLabel(row.handoverStatus) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="盘点时间" width="170">
           <template #default="{ row }">
             {{ formatTime(row.startTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
+        <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="openDetail(row)">
-              查看详情
+              详情
             </el-button>
           </template>
         </el-table-column>
@@ -149,6 +156,61 @@
         </el-card>
       </div>
 
+      <el-card class="review-card" shadow="never">
+        <div class="review-header">
+          <h3>复盘备注与交接</h3>
+          <div class="handover-select">
+            <span class="handover-label">交接状态:</span>
+            <el-select v-model="editHandoverStatus" size="small" style="width: 120px" @change="saveReview">
+              <el-option label="待交接" value="pending" />
+              <el-option label="已确认" value="confirmed" />
+              <el-option label="已签字" value="signed" />
+            </el-select>
+          </div>
+        </div>
+        <div class="review-grid">
+          <div class="review-item">
+            <label class="review-item-label">
+              <el-tag type="danger" size="small">缺失</el-tag>
+              处理结论
+            </label>
+            <el-input
+              v-model="editReviewNotes.missing"
+              type="textarea"
+              :rows="2"
+              placeholder="记录缺失箱体的处理情况..."
+              @blur="saveReview"
+            />
+          </div>
+          <div class="review-item">
+            <label class="review-item-label">
+              <el-tag type="warning" size="small">多出</el-tag>
+              处理结论
+            </label>
+            <el-input
+              v-model="editReviewNotes.extra"
+              type="textarea"
+              :rows="2"
+              placeholder="记录多出箱体的处理情况..."
+              @blur="saveReview"
+            />
+          </div>
+          <div class="review-item">
+            <label class="review-item-label">
+              <el-tag type="danger" size="small">错线路</el-tag>
+              处理结论
+            </label>
+            <el-input
+              v-model="editReviewNotes.wrong"
+              type="textarea"
+              :rows="2"
+              placeholder="记录错线路箱体的处理情况..."
+              @blur="saveReview"
+            />
+          </div>
+        </div>
+      </el-card>
+
       <div class="detail-tabs-bar">
         <el-radio-group v-model="detailTab" size="small">
           <el-radio-button value="all">全部({{ detailAllRecords.length }})</el-radio-button>
@@ -163,7 +225,7 @@
       </div>
 
       <el-card shadow="never" class="detail-table-card">
-        <el-table v-if="detailTab !== 'missing'" :data="detailFilteredRecords" stripe height="320">
+        <el-table v-if="detailTab !== 'missing'" :data="detailFilteredRecords" stripe height="280">
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column prop="boxCode" label="箱码" width="140" />
           <el-table-column prop="type" label="类型" width="80" align="center">
@@ -181,7 +243,7 @@
           <el-table-column prop="time" label="扫描时间" width="170" />
         </el-table>
 
-        <el-table v-else :data="detailMissingRecords" stripe height="320">
+        <el-table v-else :data="detailMissingRecords" stripe height="280">
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column prop="boxCode" label="箱码" width="160" />
           <el-table-column prop="route" label="应回线路" min-width="160" />
@@ -225,6 +287,9 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="selectedBatch?.reviewNotes?.missing" class="export-note">
+            处理结论: {{ selectedBatch.reviewNotes.missing }}
+          </div>
         </div>
 
         <div v-if="selectedBatch && selectedBatch.extraBoxes.length > 0" class="export-section">
@@ -239,6 +304,9 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="selectedBatch?.reviewNotes?.extra" class="export-note">
+            处理结论: {{ selectedBatch.reviewNotes.extra }}
+          </div>
         </div>
 
         <div v-if="selectedBatch && selectedBatch.wrongRouteBoxes.length > 0" class="export-section">
@@ -254,9 +322,13 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="selectedBatch?.reviewNotes?.wrong" class="export-note">
+            处理结论: {{ selectedBatch.reviewNotes.wrong }}
+          </div>
         </div>
 
         <div class="export-footer">
+          <p>交接状态: {{ handoverLabel(selectedBatch?.handoverStatus) }}</p>
           <p>制表人: ____________ &nbsp;&nbsp; 接收人: ____________ &nbsp;&nbsp; 日期: ____________</p>
         </div>
       </div>
@@ -271,7 +343,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Back,
@@ -284,7 +356,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useStore } from '../store'
 
-const { state, getRouteName } = useStore()
+const { state, getRouteName, updateBatchReview } = useStore()
 
 const routes = computed(() => state.routes)
 const filterRoute = ref('')
@@ -294,6 +366,9 @@ const selectedBatch = ref(null)
 const detailTab = ref('all')
 const showExportPreview = ref(false)
 const exportPreviewRef = ref(null)
+
+const editHandoverStatus = ref('pending')
+const editReviewNotes = ref({ missing: '', extra: '', wrong: '' })
 
 const filteredBatches = computed(() => {
   let list = state.stockBatches.slice()
@@ -329,6 +404,16 @@ function formatTime(iso) {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit'
   })
+}
+
+function handoverLabel(status) {
+  const map = { pending: '待交接', confirmed: '已确认', signed: '已签字' }
+  return map[status] || '待交接'
+}
+
+function handoverTagType(status) {
+  const map = { pending: 'info', confirmed: 'warning', signed: 'success' }
+  return map[status] || 'info'
 }
 
 const detailReturnedCount = computed(() => {
@@ -371,15 +456,24 @@ const detailAllRecords = computed(() => {
       records.push({
         boxCode: code, type: 'extra', tagType: 'warning', typeLabel: '多出',
         route: box ? getRouteName(box.routeId) : getRouteName(batch.routeId),
-        originalRoute: '',
-        time: extraRecord.scanTime
+        originalRoute: '', time: extraRecord.scanTime
       })
     } else {
       records.push({
         boxCode: code, type: 'normal', tagType: 'success', typeLabel: '正常',
         route: box ? getRouteName(box.routeId) : getRouteName(batch.routeId),
-        originalRoute: '',
-        time: ''
+        originalRoute: '', time: ''
+      })
+    }
+  })
+
+  batch.wrongRouteBoxes.forEach(r => {
+    if (!batch.scannedCodes.includes(r.boxCode)) {
+      records.push({
+        boxCode: r.boxCode, type: 'wrong', tagType: 'danger', typeLabel: '错线路',
+        route: getRouteName(batch.routeId),
+        originalRoute: r.originalRouteName,
+        time: r.scanTime
       })
     }
   })
@@ -403,7 +497,34 @@ const detailMissingRecords = computed(() => {
 function openDetail(batch) {
   selectedBatch.value = batch
   detailTab.value = 'all'
+  editHandoverStatus.value = batch.handoverStatus || 'pending'
+  editReviewNotes.value = {
+    missing: batch.reviewNotes?.missing || '',
+    extra: batch.reviewNotes?.extra || '',
+    wrong: batch.reviewNotes?.wrong || ''
+  }
 }
+
+function saveReview() {
+  if (!selectedBatch.value) return
+  updateBatchReview(selectedBatch.value.id, {
+    handoverStatus: editHandoverStatus.value,
+    reviewNotes: { ...editReviewNotes.value }
+  })
+}
+
+watch(
+  () => state.stockBatches,
+  () => {
+    if (selectedBatch.value) {
+      const updated = state.stockBatches.find(b => b.id === selectedBatch.value.id)
+      if (updated) {
+        selectedBatch.value = updated
+      }
+    }
+  },
+  { deep: true }
+)
 
 function exportHandover() {
   showExportPreview.value = true
@@ -423,6 +544,7 @@ function printHandover() {
       .export-table { width: 100%; border-collapse: collapse; }
       .export-table th, .export-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
       .export-table th { background: #f5f5f5; }
+      .export-note { background: #f8fafc; border-left: 3px solid #3b82f6; padding: 6px 10px; margin-top: 8px; font-size: 12px; color: #334155; }
       .export-footer { margin-top: 24px; border-top: 1px solid #ddd; padding-top: 12px; }
       .text-danger { color: #dc2626; }
       .text-warning { color: #d97706; }
@@ -439,12 +561,14 @@ function printHandover() {
 function downloadHandoverCsv() {
   if (!selectedBatch.value) return
   const batch = selectedBatch.value
+  const rn = batch.reviewNotes || {}
   const rows = [['盘点交接清单', '', '', ''],
     ['线路', getRouteName(batch.routeId), '', ''],
     ['时间', formatTime(batch.startTime), '', ''],
     ['应回', batch.expectedCodes.length, '已回', detailReturnedCount.value],
     ['缺失', detailMissingCodes.value.length, '多出', batch.extraBoxes.length],
     ['错线路', batch.wrongRouteBoxes.length, '', ''],
+    ['交接状态', handoverLabel(batch.handoverStatus), '', ''],
     []]
 
   if (detailMissingCodes.value.length > 0) {
@@ -453,6 +577,9 @@ function downloadHandoverCsv() {
     detailMissingCodes.value.forEach((code, i) => {
       rows.push([i + 1, code, getRouteName(batch.routeId), ''])
     })
+    if (rn.missing) {
+      rows.push(['缺失处理结论', rn.missing, '', ''])
+    }
     rows.push([])
   }
 
@@ -462,6 +589,9 @@ function downloadHandoverCsv() {
     batch.extraBoxes.forEach((r, i) => {
       rows.push([i + 1, r.boxCode, r.scanTime, ''])
     })
+    if (rn.extra) {
+      rows.push(['多出处理结论', rn.extra, '', ''])
+    }
     rows.push([])
   }
 
@@ -471,6 +601,9 @@ function downloadHandoverCsv() {
     batch.wrongRouteBoxes.forEach((r, i) => {
       rows.push([i + 1, r.boxCode, r.originalRouteName, r.scanTime])
     })
+    if (rn.wrong) {
+      rows.push(['错线路处理结论', rn.wrong, '', ''])
+    }
   }
 
   const bom = '\uFEFF'
@@ -559,6 +692,55 @@ function downloadHandoverCsv() {
 .stat-val { font-size: 24px; font-weight: 700; color: #1e293b; line-height: 1.2; }
 .stat-lbl { font-size: 12px; color: #64748b; margin-top: 2px; }
 
+.review-card {
+  border-radius: 10px;
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.review-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.handover-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.handover-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+}
+
 .detail-tabs-bar {
   display: flex;
   align-items: center;
@@ -591,8 +773,19 @@ function downloadHandoverCsv() {
 .export-table th, .export-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
 .export-table th { background: #f5f5f5; font-weight: 600; }
 
+.export-note {
+  background: #f8fafc;
+  border-left: 3px solid #3b82f6;
+  padding: 6px 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #334155;
+}
+
 .export-footer {
   margin-top: 24px; border-top: 1px solid #ddd; padding-top: 12px;
   font-size: 13px; color: #666;
 }
+
+.export-footer p { margin: 4px 0; }
 </style>
