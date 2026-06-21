@@ -20,6 +20,10 @@
             <el-icon><Box /></el-icon>
             <span>入库盘点</span>
           </el-menu-item>
+          <el-menu-item index="/batch-history">
+            <el-icon><Document /></el-icon>
+            <span>批次历史</span>
+          </el-menu-item>
           <el-menu-item index="/cleaning-sort">
             <el-icon><Brush /></el-icon>
             <span>清洗分拣</span>

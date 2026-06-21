@@ -393,35 +393,42 @@ const normalRecords = computed(() => {
 const allRecords = computed(() => {
   if (!currentBatch.value) return []
   const records = []
+  const batch = currentBatch.value
 
-  currentBatch.value.scannedCodes.forEach(code => {
-    const extraRecord = currentBatch.value.extraBoxes.find(r => r.boxCode === code)
-    const wrongRecord = currentBatch.value.wrongRouteBoxes.find(r => r.boxCode === code)
+  batch.scannedCodes.forEach(code => {
+    const extraRecord = batch.extraBoxes.find(r => r.boxCode === code)
+    const wrongRecord = batch.wrongRouteBoxes.find(r => r.boxCode === code)
     const box = state.boxes.find(b => b.code === code)
 
     if (wrongRecord) {
       records.push({
-        boxCode: code,
-        type: 'wrong',
-        route: getRouteName(currentBatch.value.routeId),
+        boxCode: code, type: 'wrong',
+        route: getRouteName(batch.routeId),
         originalRoute: wrongRecord.originalRouteName,
         time: wrongRecord.scanTime
       })
     } else if (extraRecord) {
       records.push({
-        boxCode: code,
-        type: 'extra',
-        route: box ? getRouteName(box.routeId) : getRouteName(currentBatch.value.routeId),
-        originalRoute: '',
-        time: extraRecord.scanTime
+        boxCode: code, type: 'extra',
+        route: box ? getRouteName(box.routeId) : getRouteName(batch.routeId),
+        originalRoute: '', time: extraRecord.scanTime
       })
     } else {
       records.push({
-        boxCode: code,
-        type: 'normal',
-        route: box ? getRouteName(box.routeId) : getRouteName(currentBatch.value.routeId),
-        originalRoute: '',
-        time: ''
+        boxCode: code, type: 'normal',
+        route: box ? getRouteName(box.routeId) : getRouteName(batch.routeId),
+        originalRoute: '', time: ''
+      })
+    }
+  })
+
+  batch.wrongRouteBoxes.forEach(r => {
+    if (!batch.scannedCodes.includes(r.boxCode)) {
+      records.push({
+        boxCode: r.boxCode, type: 'wrong',
+        route: getRouteName(batch.routeId),
+        originalRoute: r.originalRouteName,
+        time: r.scanTime
       })
     }
   })
@@ -450,6 +457,13 @@ function fillDemoCodes() {
   expectedCodesText.value = codes.join('\n')
 }
 
+const HEADER_KEYWORDS = ['箱码', '编号', '序号', '条码', 'code', 'id', 'box', 'no', 'no.', '箱号']
+
+function isHeaderLine(val) {
+  const lower = val.toLowerCase()
+  return HEADER_KEYWORDS.some(kw => lower === kw || lower.startsWith(kw))
+}
+
 function handleFileChange(file) {
   const reader = new FileReader()
   reader.onload = (e) => {
@@ -463,27 +477,59 @@ function applyImport() {
     ElMessage.warning('请先选择文件')
     return
   }
-  const lines = importBuffer.value
-    .split(/[\n\r]+/)
-    .map(line => {
-      const parts = line.split(/[,;\t]/)
-      return parts[0] ? parts[0].trim() : ''
-    })
-    .filter(Boolean)
-
-  if (lines.length === 0) {
-    ElMessage.warning('文件中未找到有效箱码')
-    return
-  }
 
   const existing = expectedCodesText.value
     .split(/[\n\r,;]+/)
     .map(s => s.trim())
     .filter(Boolean)
-  const merged = [...new Set([...existing, ...lines])]
+  const existingSet = new Set(existing)
+
+  const rawLines = importBuffer.value.split(/[\n\r]+/)
+  let headerSkipped = 0
+  let emptySkipped = 0
+  let dupSkipped = 0
+  const newCodes = []
+
+  rawLines.forEach((line, idx) => {
+    const parts = line.split(/[,;\t]/)
+    const val = parts[0] ? parts[0].trim() : ''
+
+    if (!val) {
+      emptySkipped++
+      return
+    }
+
+    if (idx === 0 && isHeaderLine(val)) {
+      headerSkipped++
+      return
+    }
+
+    if (existingSet.has(val) || newCodes.includes(val)) {
+      dupSkipped++
+      return
+    }
+
+    newCodes.push(val)
+  })
+
+  if (newCodes.length === 0) {
+    ElMessage.warning('文件中未找到有效新箱码')
+    return
+  }
+
+  const merged = [...existing, ...newCodes]
   expectedCodesText.value = merged.join('\n')
 
-  ElMessage.success(`已导入 ${lines.length} 个箱码`)
+  const parts = [`新增 ${newCodes.length} 个箱码`]
+  if (headerSkipped > 0) parts.push(`跳过表头 ${headerSkipped} 行`)
+  if (emptySkipped > 0) parts.push(`跳过空行 ${emptySkipped} 行`)
+  if (dupSkipped > 0) parts.push(`跳过重复 ${dupSkipped} 个`)
+
+  ElMessage.success({
+    message: parts.join('，'),
+    duration: 4000
+  })
+
   importBuffer.value = ''
   showImportDialog.value = false
 }

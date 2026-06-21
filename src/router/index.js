@@ -12,6 +12,12 @@ const routes = [
     meta: { title: '入库盘点' }
   },
   {
+    path: '/batch-history',
+    name: 'BatchHistory',
+    component: () => import('../views/BatchHistory.vue'),
+    meta: { title: '批次历史' }
+  },
+  {
     path: '/cleaning-sort',
     name: 'CleaningSort',
     component: () => import('../views/CleaningSort.vue'),
